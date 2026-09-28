@@ -8,8 +8,11 @@ $filter_cat = trim($_GET["cat"] ?? "");
 
 if ($q) {
     
-    $stmt = $pdo->prepare("SELECT * FROM products WHERE name LIKE :q OR category LIKE :q ORDER BY id DESC");
-    $stmt->execute(["q" => "%$q%"]);
+    $stmt = $pdo->prepare("SELECT * FROM products WHERE name LIKE :q1 OR category LIKE :q2 ORDER BY id DESC");
+    $stmt->execute([
+        "q1" => "%$q%", 
+        "q2" => "%$q%"
+    ]);
 } elseif ($filter_cat) {
     $stmt = $pdo->prepare("SELECT * FROM products WHERE category = :cat ORDER BY id DESC");
     $stmt->execute(["cat" => $filter_cat]);
@@ -52,14 +55,11 @@ $categories = [
             </form>
         </div>
 
-        <!-- FITUR BARU: Filter Kategori -->
         <div class="category-filter">
-            <!-- Tombol 'Semua' -->
             <a href="index.php" class="filter-btn <?= empty($filter_cat) && empty($q) ? 'active' : '' ?>">
                 Semua Peralatan
             </a>
             
-            <!-- Looping Tombol Kategori -->
             <?php foreach($categories as $cat): ?>
                 <a href="index.php?cat=<?= urlencode($cat) ?>" class="filter-btn <?= $filter_cat === $cat ? 'active' : '' ?>">
                     <?= htmlspecialchars($cat) ?>
