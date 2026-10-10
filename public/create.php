@@ -1,112 +1,159 @@
 <?php
+session_start();
+
+// Cek apakah user sudah login
+if (!isset($_SESSION['user'])) {
+    header("Location: login.php");
+    exit;
+}
+
 require_once '../config/db.php';
 
-$errors = [];
-$name = $category = "";
-$price = $stock = 0;
+// =====================================================================
+// [AUTHORIZATION] GEMBOK 403: Blokir akses jika yang login bukan admin
+// =====================================================================
+if ($_SESSION['user']['role'] !== 'admin') {
+    http_response_code(403);
+    die("<div style='font-family:sans-serif; text-align:center; margin-top:100px;'>
+          <h1 style='color:#dc3545; font-size:48px; margin-bottom:10px;'>403 Forbidden</h1>
+          <h3 style='color:#555;'>Maaf, hanya Admin yang memiliki hak akses ke halaman ini.</h3>
+          <br><br><a href='index.php' style='padding:10px 20px; background:#111; color:#fff; text-decoration:none; border-radius:5px;'>&larr; Kembali ke Dashboard</a>
+         </div>");
+}
+// =====================================================================
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $name = trim($_POST["name"] ?? "");
-    $category = trim($_POST["category"] ?? "");
-    $price = filter_input(INPUT_POST, "price", FILTER_VALIDATE_FLOAT);
-    $stock = filter_input(INPUT_POST, "stock", FILTER_VALIDATE_INT);
+// [SECURITY] Buat token rahasia CSRF
+if (empty($_SESSION['csrf'])) {
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+}
+
+$stmt = $pdo->query("SELECT * FROM categories ORDER BY name ASC");
+$categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+    // [SECURITY] Cek validitas token CSRF
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf']) {
+        die("<h3 style='color:red; text-align:center; margin-top:50px;'>Akses Ditolak: Token Keamanan (CSRF) Tidak Valid!</h3>");
+    }
+
+    $sku = trim($_POST['sku']);
+    $name = trim($_POST['name']);
+    $category_id = $_POST['category_id'];
+    $price = $_POST['price'];
+    $stock = $_POST['stock'];
+    $minimum_stock = $_POST['minimum_stock'];
+    
+    // Proses Upload Gambar
     $image_name = null;
-
-    if (mb_strlen($name) < 3) $errors["name"] = "Nama produk minimal 3 karakter.";
-    if ($price === false || $price <= 0) $errors["price"] = "Harga harus lebih dari 0.";
-    if ($stock === false || $stock < 0) $errors["stock"] = "Stok tidak boleh bernilai negatif.";
-    if (empty($category)) $category = "Uncategorized";
-
     if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $file_ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
         $allowed_ext = ['jpg', 'jpeg', 'png', 'webp'];
-        $file_name = $_FILES['image']['name'];
-        $file_tmp = $_FILES['image']['tmp_name'];
-        $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-
+        
         if (in_array($file_ext, $allowed_ext)) {
-            $image_name = time() . '_' . preg_replace("/[^a-zA-Z0-9.]/", "", $file_name);
-            move_uploaded_file($file_tmp, 'uploads/' . $image_name);
+            $image_name = uniqid() . '.' . $file_ext; 
+            move_uploaded_file($_FILES['image']['tmp_name'], 'uploads/' . $image_name);
         } else {
-            $errors["image"] = "Format file tidak didukung. Gunakan JPG, PNG, atau WEBP.";
+            $error = "Format gambar harus JPG, PNG, atau WEBP.";
         }
     }
 
-    if (empty($errors)) {
+    if (empty($sku) || empty($name) || empty($category_id)) {
+        $error = "Peringatan: SKU, Nama, dan Kategori tidak boleh kosong!";
+    } elseif (empty($error)) {
         try {
-            $stmt = $pdo->prepare("INSERT INTO products (name, category, price, stock, image) VALUES (:name, :category, :price, :stock, :image)");
+            $stmt = $pdo->prepare("INSERT INTO products (category_id, sku, name, price, stock, minimum_stock, image) 
+                                   VALUES (:category_id, :sku, :name, :price, :stock, :minimum_stock, :image)");
             $stmt->execute([
-                "name" => $name,
-                "category" => $category,
-                "price" => $price,
-                "stock" => $stock,
-                "image" => $image_name
+                'category_id' => $category_id, 
+                'sku' => $sku, 
+                'name' => $name, 
+                'price' => $price, 
+                'stock' => $stock, 
+                'minimum_stock' => $minimum_stock, 
+                'image' => $image_name
             ]);
-            header("Location: index.php?status=created");
+            
+            // Redirect jika sukses
+            echo "<script>window.location.href = 'index.php?status=created';</script>";
             exit;
+            
         } catch (PDOException $e) {
-            if ($e->getCode() == 23000) $errors["name"] = "Peralatan dengan nama ini sudah terdaftar di sistem.";
-            else $errors["db"] = "System Error: " . $e->getMessage();
+            if ($e->getCode() == 23000) { 
+                $error = "Gagal: Kode SKU '$sku' sudah digunakan oleh barang lain!";
+            } else { 
+                $error = "Error Database: " . $e->getMessage(); 
+            }
         }
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Input Equipment - Multivision Gear</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <title>Tambah Alat - Admin</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;}
+        .btn { padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; }
+        .btn-secondary { background: #6c757d; }
+        .error { color: #721c24; margin-bottom: 15px; background: #f8d7da; padding: 10px; border-radius: 4px; border: 1px solid #f5c6cb;}
+    </style>
 </head>
 <body>
-    <div class="navbar"><h2>MULTIVISION GEAR</h2></div>
-    
     <div class="container">
-        <form method="POST" action="create.php" class="main-form" enctype="multipart/form-data">
-            <h3 style="margin:0 0 30px 0; font-size:22px; color:#111;">Input Peralatan Baru</h3>
+        <h2>Tambah Gear Baru</h2>
+        
+        <?php if ($error): ?>
+            <div class="error"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+
+        <form method="POST" enctype="multipart/form-data">
             
-            <?php if(isset($errors["db"])) echo '<div class="error">'.$errors["db"].'</div>'; ?>
-
-            <div class="form-group">
-                <label>Nama Alat / Tipe *</label>
-                <input type="text" name="name" value="<?= htmlspecialchars($name) ?>" required minlength="3">
-                <?php if(isset($errors["name"])) echo '<span class="error">'.$errors["name"].'</span>'; ?>
-            </div>
-
-            <div class="form-group">
-    <label>Kategori</label>
-    <select name="category" required>
-        <option value="" disabled <?= empty($category) ? 'selected' : '' ?>>Pilih Kategori...</option>
-        <option value="Kamera & Lensa" <?= $category === 'Kamera & Lensa' ? 'selected' : '' ?>>Kamera & Lensa</option>
-        <option value="Aksesori & Stabilizer" <?= $category === 'Aksesori & Stabilizer' ? 'selected' : '' ?>>Aksesori & Stabilizer</option>
-        <option value="Audio & Recording" <?= $category === 'Audio & Recording' ? 'selected' : '' ?>>Audio & Recording</option>
-        <option value="Studio & Alat Desain" <?= $category === 'Studio & Alat Desain' ? 'selected' : '' ?>>Studio & Alat Desain</option>
-    </select>
-</div>
-
-            <div class="form-group" style="display: flex; gap: 20px;">
-                <div style="flex:2;">
-                    <label>Harga Satuan (Rp) *</label>
-                    <input type="number" name="price" value="<?= $price ?>" required min="1">
-                    <?php if(isset($errors["price"])) echo '<span class="error">'.$errors["price"].'</span>'; ?>
-                </div>
-                <div style="flex:1;">
-                    <label>Stok *</label>
-                    <input type="number" name="stock" value="<?= $stock ?>" required min="0">
-                    <?php if(isset($errors["stock"])) echo '<span class="error">'.$errors["stock"].'</span>'; ?>
-                </div>
-            </div>
+            <!-- [SECURITY] Sisipkan token rahasia -->
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf']) ?>">
 
             <div class="form-group">
                 <label>Foto Produk (Opsional)</label>
-                <input type="file" name="image" accept="image/png, image/jpeg, image/webp" style="padding: 10px; background: white;">
-                <?php if(isset($errors["image"])) echo '<span class="error">'.$errors["image"].'</span>'; ?>
+                <input type="file" name="image" accept="image/png, image/jpeg, image/webp">
             </div>
-
-            <div style="display: flex; gap: 15px; margin-top: 40px;">
-                <button type="submit" class="btn btn-primary" style="flex: 1;">Simpan ke Database</button>
-                <a href="index.php" class="btn btn-warning" style="text-align: center; padding: 12px 24px;">Batal</a>
+            <div class="form-group">
+                <label>SKU (Kode Barang)</label>
+                <input type="text" name="sku" placeholder="Contoh: CAM-001">
             </div>
+            <div class="form-group">
+                <label>Nama Alat</label>
+                <input type="text" name="name">
+            </div>
+            <div class="form-group">
+                <label>Kategori</label>
+                <select name="category_id">
+                    <option value="">-- Pilih --</option>
+                    <?php foreach ($categories as $cat): ?>
+                        <option value="<?= $cat['id'] ?>"><?= htmlspecialchars($cat['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Harga Sewa (Rp)</label>
+                <input type="number" name="price" min="0" value="0">
+            </div>
+            <div class="form-group">
+                <label>Stok Awal</label>
+                <input type="number" name="stock" min="0" value="1">
+            </div>
+            <div class="form-group">
+                <label>Batas Minimum Stok</label>
+                <input type="number" name="minimum_stock" min="0" value="1">
+            </div>
+            
+            <button type="submit" class="btn">Simpan Data</button>
+            <a href="index.php" class="btn btn-secondary">Batal</a>
         </form>
     </div>
 </body>

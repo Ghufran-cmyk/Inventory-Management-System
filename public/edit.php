@@ -1,150 +1,133 @@
 <?php
+session_start();
+if (!isset($_SESSION['user'])) {
+    header("Location: login.php");
+    exit;
+}
+
 require_once '../config/db.php';
 
-$id = filter_input(INPUT_GET, "id", FILTER_VALIDATE_INT);
-if (!$id) {
-    header("Location: index.php");
-    exit;
-}
+$id = $_GET['id'] ?? null;
+if (!$id) { header("Location: index.php"); exit; }
 
 $stmt = $pdo->prepare("SELECT * FROM products WHERE id = :id");
-$stmt->execute(["id" => $id]);
-$product = $stmt->fetch();
+$stmt->execute(['id' => $id]);
+$product = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$product) {
-    header("Location: index.php");
-    exit;
-}
+if (!$product) { header("Location: index.php"); exit; }
 
-$errors = [];
-$name = $product["name"];
-$category = $product["category"];
-$price = $product["price"];
-$stock = $product["stock"];
-$currentImage = $product["image"] ?? null;
+$cat_stmt = $pdo->query("SELECT * FROM categories ORDER BY name ASC");
+$categories = $cat_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $name = trim($_POST["name"] ?? "");
-    $category = trim($_POST["category"] ?? "");
-    $price = filter_input(INPUT_POST, "price", FILTER_VALIDATE_FLOAT);
-    $stock = filter_input(INPUT_POST, "stock", FILTER_VALIDATE_INT);
-    $post_id = filter_input(INPUT_POST, "id", FILTER_VALIDATE_INT);
+$error = '';
 
-    if (mb_strlen($name) < 3) {
-        $errors["name"] = "Nama produk minimal 3 karakter.";
-    }
-    if ($price === false || $price <= 0) {
-        $errors["price"] = "Harga harus lebih dari 0.";
-    }
-    if ($stock === false || $stock < 0) {
-        $errors["stock"] = "Stok tidak boleh negatif.";
-    }
-    if (empty($category)) {
-        $category = "Umum";
-    }
-
-    if (empty($errors) && $post_id === $id) {
-        $imageName = $currentImage;
-
-        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            $tmpName = $_FILES['image']['tmp_name'];
-            $newImageName = time() . '_' . basename($_FILES['image']['name']);
-            $destination = __DIR__ . '/uploads/' . $newImageName;
-
-            if (move_uploaded_file($tmpName, $destination)) {
-                if (!empty($currentImage) && file_exists(__DIR__ . '/uploads/' . $currentImage)) {
-                    unlink(__DIR__ . '/uploads/' . $currentImage);
-                }
-                $imageName = $newImageName; 
-            } else {
-                $errors["db"] = "Gagal mengunggah foto baru.";
-            }
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $sku = trim($_POST['sku']);
+    $name = trim($_POST['name']);
+    $category_id = $_POST['category_id'];
+    $price = $_POST['price'];
+    $stock = $_POST['stock'];
+    $minimum_stock = $_POST['minimum_stock'];
+    
+    // Pertahankan gambar lama sebagai default
+    $image_name = $product['image']; 
+    
+    // Cek jika ada gambar baru yang diupload
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $file_ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        $allowed_ext = ['jpg', 'jpeg', 'png', 'webp'];
+        
+        if (in_array($file_ext, $allowed_ext)) {
+            $image_name = uniqid() . '.' . $file_ext;
+            move_uploaded_file($_FILES['image']['tmp_name'], 'uploads/' . $image_name);
+        } else {
+            $error = "Format gambar harus JPG, PNG, atau WEBP.";
         }
+    }
 
-        if (empty($errors)) {
-            try {
-                
-                $updateStmt = $pdo->prepare("UPDATE products SET name = :name, category = :category, price = :price, stock = :stock, image = :image WHERE id = :id");
-                $updateStmt->execute([
-                    "name" => $name,
-                    "category" => $category,
-                    "price" => $price,
-                    "stock" => $stock,
-                    "image" => $imageName, 
-                    "id" => $id
-                ]);
-
-                header("Location: index.php");
-                exit;
-            } catch (PDOException $e) {
-                if ($e->getCode() == 23000) {
-                    $errors["name"] = "Nama produk sudah terdaftar, gunakan nama lain.";
-                } else {
-                    $errors["db"] = "Gagal mengubah data: " . $e->getMessage();
-                }
-            }
+    if (empty($sku) || empty($name) || empty($category_id)) {
+        $error = "SKU, Nama, dan Kategori wajib diisi!";
+    } elseif (empty($error)) {
+        try {
+            $update_stmt = $pdo->prepare("UPDATE products SET category_id = :category_id, sku = :sku, name = :name, price = :price, stock = :stock, minimum_stock = :minimum_stock, image = :image WHERE id = :id");
+            $update_stmt->execute([
+                'category_id' => $category_id, 'sku' => $sku, 'name' => $name,
+                'price' => $price, 'stock' => $stock, 'minimum_stock' => $minimum_stock,
+                'image' => $image_name, 'id' => $id
+            ]);
+            header("Location: index.php?status=updated");
+            exit;
+        } catch (PDOException $e) {
+            $error = "Error: " . $e->getMessage();
         }
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Edit Produk</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <title>Edit Alat - Admin</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;}
+        .btn { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block;}
+        .btn-secondary { background: #6c757d; }
+        .error { color: red; margin-bottom: 15px; }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h2>Edit Produk</h2>
+        <h2>Edit Data Gear</h2>
+        <?php if ($error): ?><div class="error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
-        <?php if(isset($errors["db"])): ?>
-            <div class="error" style="margin-bottom:10px; font-size:14px;"><?= $errors["db"] ?></div>
-        <?php endif; ?>
-
-        <form method="POST" enctype="multipart/form-data" action="edit.php?id=<?= $id ?>">
-            <input type="hidden" name="id" value="<?= $id ?>">
-
+        <form method="POST" enctype="multipart/form-data">
             <div class="form-group">
-                <label for="name">Nama Produk *</label>
-                <input type="text" id="name" name="name" value="<?= htmlspecialchars($name, ENT_QUOTES) ?>" required minlength="3">
-                <?php if(isset($errors["name"])) echo '<span class="error">'.$errors["name"].'</span>'; ?>
+                <label>Foto Produk (Biarkan kosong jika tidak ingin ganti)</label>
+                <?php if ($product['image']): ?>
+                    <img src="uploads/<?= htmlspecialchars($product['image']) ?>" alt="Foto" style="height: 100px; border-radius: 5px; margin-bottom: 10px; display: block;">
+                <?php endif; ?>
+                <input type="file" name="image" accept="image/png, image/jpeg, image/webp">
             </div>
-
+            <div class="form-group">
+                <label>SKU (Kode Barang)</label>
+                <input type="text" name="sku" required value="<?= htmlspecialchars($product['sku']) ?>">
+            </div>
+            <div class="form-group">
+                <label>Nama Alat</label>
+                <input type="text" name="name" required value="<?= htmlspecialchars($product['name']) ?>">
+            </div>
             <div class="form-group">
                 <label>Kategori</label>
-                <select name="category" required>
-                    <option value="" disabled <?= empty($category) ? 'selected' : '' ?>>Pilih Kategori...</option>
-                    <option value="Kamera & Lensa" <?= $category === 'Kamera & Lensa' ? 'selected' : '' ?>>Kamera & Lensa</option>
-                    <option value="Aksesori & Stabilizer" <?= $category === 'Aksesori & Stabilizer' ? 'selected' : '' ?>>Aksesori & Stabilizer</option>
-                    <option value="Audio & Recording" <?= $category === 'Audio & Recording' ? 'selected' : '' ?>>Audio & Recording</option>
-                    <option value="Studio & Alat Desain" <?= $category === 'Studio & Alat Desain' ? 'selected' : '' ?>>Studio & Alat Desain</option>
+                <select name="category_id" required>
+                    <option value="">-- Pilih --</option>
+                    <?php foreach ($categories as $cat): ?>
+                        <option value="<?= $cat['id'] ?>" <?= $product['category_id'] == $cat['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($cat['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
                 </select>
             </div>
-
             <div class="form-group">
-                <label for="price">Harga (Rp) *</label>
-                <input type="number" id="price" name="price" value="<?= $price ?>" required min="1">
-                <?php if(isset($errors["price"])) echo '<span class="error">'.$errors["price"].'</span>'; ?>
+                <label>Harga Sewa (Rp)</label>
+                <input type="number" name="price" required min="0" value="<?= htmlspecialchars($product['price']) ?>">
             </div>
-
             <div class="form-group">
-                <label for="stock">Stok *</label>
-                <input type="number" id="stock" name="stock" value="<?= $stock ?>" required min="0">
-                <?php if(isset($errors["stock"])) echo '<span class="error">'.$errors["stock"].'</span>'; ?>
+                <label>Stok Saat Ini</label>
+                <input type="number" name="stock" required min="0" value="<?= htmlspecialchars($product['stock']) ?>">
             </div>
-
             <div class="form-group">
-                <label for="image">Ganti Foto Produk (Opsional)</label>
-                <br>
-                <input type="file" name="image" id="image" accept="image/*" style="margin-top: 5px;">
-                <br>
-                <small style="color: #666;"><i>*Biarkan kosong jika tidak ingin mengganti foto</i></small>
+                <label>Batas Minimum Stok</label>
+                <input type="number" name="minimum_stock" required min="0" value="<?= htmlspecialchars($product['minimum_stock']) ?>">
             </div>
-
-            <button type="submit" class="btn btn-primary">Simpan Perubahan</button>
-            <a href="index.php" class="btn btn-warning" style="margin-left: 10px;">Batal</a>
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button type="submit" class="btn">Update Data</button>
+                <a href="index.php" class="btn btn-secondary">Batal</a>
+            </div>
         </form>
     </div>
 </body>
