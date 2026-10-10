@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 28 Sep 2026 pada 06.38
+-- Waktu pembuatan: 11 Okt 2026 pada 01.37
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.0.30
 
@@ -24,54 +24,227 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `categories`
+--
+
+CREATE TABLE `categories` (
+  `id` int(11) NOT NULL,
+  `name` varchar(100) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data untuk tabel `categories`
+--
+
+INSERT INTO `categories` (`id`, `name`) VALUES
+(2, 'Aksesori & Stabilizer'),
+(3, 'Audio & Recording'),
+(1, 'Kamera & Lensa'),
+(4, 'Studio & Alat Desain');
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `products`
 --
 
 CREATE TABLE `products` (
   `id` int(11) NOT NULL,
-  `name` varchar(100) NOT NULL,
-  `category` varchar(50) NOT NULL DEFAULT 'Umum',
-  `image` varchar(255) DEFAULT NULL,
-  `price` decimal(12,2) NOT NULL,
-  `stock` int(11) NOT NULL DEFAULT 0,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `category_id` int(11) NOT NULL,
+  `sku` varchar(50) NOT NULL,
+  `name` varchar(150) NOT NULL,
+  `price` decimal(12,2) NOT NULL CHECK (`price` >= 0),
+  `stock` int(11) NOT NULL DEFAULT 0 CHECK (`stock` >= 0),
+  `minimum_stock` int(11) NOT NULL DEFAULT 5,
+  `image` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data untuk tabel `products`
 --
 
-INSERT INTO `products` (`id`, `name`, `category`, `image`, `price`, `stock`, `created_at`) VALUES
-(5, 'Kamera Canon M50', 'Kamera & Lensa', '1790371047_EOSM50SupportFirmwareSoftwareManuals.jpg', 7000000.00, 4, '2026-09-25 21:17:27'),
-(8, 'Gimbal  Zhiyun Crane M2S', 'Aksesori & Stabilizer', '1790372934_WhatsAppImage20260926at16.47.43.jpeg', 4000000.00, 5, '2026-09-25 21:48:54'),
-(9, 'Lensa Canon EF 50mm', 'Kamera & Lensa', '1790376897_WhatsAppImage20260926at17.54.50.jpeg', 1800000.00, 9, '2026-09-25 22:54:57'),
-(10, 'DJI Osmo Pocket 3', 'Kamera & Lensa', '1790377100_WhatsAppImage20260926at17.58.21.jpeg', 8500000.00, 6, '2026-09-25 22:58:21'),
-(11, 'SanDisk Extreme Pro SDXC 128GB', 'Aksesori & Stabilizer', '1790377327_WhatsAppImage20260926at18.02.07.jpeg', 400000.00, 32, '2026-09-25 23:02:07'),
-(12, 'Lampu Studio Godox SL60W Video Light', 'Studio & Alat Desain', '1790377616_WhatsAppImage20260926at18.06.52.jpeg', 1500000.00, 10, '2026-09-25 23:06:56'),
-(14, 'Pen Tablet Wacom Intuos Medium', 'Studio & Alat Desain', '1790378037_WhatsAppImage20260926at18.12.46.jpeg', 2800000.00, 15, '2026-09-25 23:13:57'),
-(15, 'Boya BY-M1 Lavalier Microphone', 'Audio & Recording', '1790378323_WhatsAppImage20260926at18.18.45.jpeg', 150000.00, 50, '2026-09-25 23:18:43'),
-(17, 'Tripod Takara Rover 66', 'Aksesori & Stabilizer', '1790569830_WhatsApp Image 2026-09-26 at 18.24.22.jpeg', 750000.00, 17, '2026-09-25 23:25:18');
+INSERT INTO `products` (`id`, `category_id`, `sku`, `name`, `price`, `stock`, `minimum_stock`, `image`) VALUES
+(9, 1, 'MV-001', 'Kamera Canon M50', 100000.00, 4, 10, '6acabc795c43a.jpg'),
+(10, 1, 'MV-002', 'Lensa 50mm', 50000.00, 6, 15, '6acabcaabe0ef.jpeg');
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `product_suppliers`
+--
+
+CREATE TABLE `product_suppliers` (
+  `product_id` int(11) NOT NULL,
+  `supplier_id` int(11) NOT NULL,
+  `supplier_price` decimal(12,2) DEFAULT NULL CHECK (`supplier_price` >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `stock_movements`
+--
+
+CREATE TABLE `stock_movements` (
+  `id` int(11) NOT NULL,
+  `product_id` int(11) NOT NULL,
+  `type` enum('in','out') NOT NULL,
+  `quantity` int(11) NOT NULL,
+  `description` text DEFAULT NULL,
+  `movement_date` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data untuk tabel `stock_movements`
+--
+
+INSERT INTO `stock_movements` (`id`, `product_id`, `type`, `quantity`, `description`, `movement_date`) VALUES
+(2, 9, 'out', 2, 'Disewa oleh Ghufran', '2026-10-10 22:31:53');
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `suppliers`
+--
+
+CREATE TABLE `suppliers` (
+  `id` int(11) NOT NULL,
+  `name` varchar(150) NOT NULL,
+  `contact_info` varchar(255) DEFAULT NULL,
+  `address` text DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data untuk tabel `suppliers`
+--
+
+INSERT INTO `suppliers` (`id`, `name`, `contact_info`, `address`) VALUES
+(1, 'farnz store', '083125922565', 'krukuh'),
+(2, 'Rentify', '091234567890', 'Krukuh');
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `users`
+--
+
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL,
+  `username` varchar(50) NOT NULL,
+  `password` varchar(255) NOT NULL,
+  `role` varchar(20) DEFAULT 'admin'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data untuk tabel `users`
+--
+
+INSERT INTO `users` (`id`, `username`, `password`, `role`) VALUES
+(1, 'admin', '$2y$10$gq/0vZVzVJfX/If2jYA1Cu9NMDq.V7LZO/hGzJO8Jdathd/LkLoKC', 'admin'),
+(2, 'karyawan', '$2y$10$Kq77xhJFRnt6o9OPde92ZetiS55DuUpn5H77IiRPV0sEfnLEzxXKC', 'staff');
 
 --
 -- Indexes for dumped tables
 --
 
 --
+-- Indeks untuk tabel `categories`
+--
+ALTER TABLE `categories`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `name` (`name`);
+
+--
 -- Indeks untuk tabel `products`
 --
 ALTER TABLE `products`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `name` (`name`);
+  ADD UNIQUE KEY `sku` (`sku`),
+  ADD KEY `category_id` (`category_id`);
+
+--
+-- Indeks untuk tabel `product_suppliers`
+--
+ALTER TABLE `product_suppliers`
+  ADD PRIMARY KEY (`product_id`,`supplier_id`),
+  ADD KEY `supplier_id` (`supplier_id`);
+
+--
+-- Indeks untuk tabel `stock_movements`
+--
+ALTER TABLE `stock_movements`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `product_id` (`product_id`);
+
+--
+-- Indeks untuk tabel `suppliers`
+--
+ALTER TABLE `suppliers`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `users`
+--
+ALTER TABLE `users`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `username` (`username`);
 
 --
 -- AUTO_INCREMENT untuk tabel yang dibuang
 --
 
 --
+-- AUTO_INCREMENT untuk tabel `categories`
+--
+ALTER TABLE `categories`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
 -- AUTO_INCREMENT untuk tabel `products`
 --
 ALTER TABLE `products`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+
+--
+-- AUTO_INCREMENT untuk tabel `stock_movements`
+--
+ALTER TABLE `stock_movements`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT untuk tabel `suppliers`
+--
+ALTER TABLE `suppliers`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT untuk tabel `users`
+--
+ALTER TABLE `users`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)
+--
+
+--
+-- Ketidakleluasaan untuk tabel `products`
+--
+ALTER TABLE `products`
+  ADD CONSTRAINT `products_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON UPDATE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `product_suppliers`
+--
+ALTER TABLE `product_suppliers`
+  ADD CONSTRAINT `product_suppliers_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `product_suppliers_ibfk_2` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `stock_movements`
+--
+ALTER TABLE `stock_movements`
+  ADD CONSTRAINT `stock_movements_ibfk_1` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
