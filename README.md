@@ -1,5 +1,4 @@
 # Multivision Gear – Inventory Management System
-**Mini Project 3 - Pemrograman Web**
 **Oleh:** Ghufran Fadlurrahman (@gfranfdlur_)
 
 ---
